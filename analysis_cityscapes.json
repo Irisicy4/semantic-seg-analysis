@@ -1,0 +1,44 @@
+{
+  "by_image_instance": [
+    {
+      "image_id": "cityscapes_frankfurt_000000_001751_gtFine_color",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.0012875,
+      "ranking_agrees": false,
+      "composite_score": 0.0012875,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "cityscapes_frankfurt_000000_001236_gtFine_color",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.00114896,
+      "ranking_agrees": false,
+      "composite_score": 0.00114896,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "cityscapes_frankfurt_000000_000294_gtFine_color",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.00065606,
+      "ranking_agrees": false,
+      "composite_score": 0.00065606,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "cityscapes_frankfurt_000000_001016_gtFine_color",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.00065093,
+      "ranking_agrees": false,
+      "composite_score": 0.00065093,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "cityscapes_frankfurt_000000_000576_gtFine_color",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.00033961,
+      "ranking_agrees": false,
+      "composite_score": 0.00033961,
+      "n_annotations": 12
+    }
+  ]
+}

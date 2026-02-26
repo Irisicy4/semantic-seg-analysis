@@ -13,9 +13,16 @@ Usage:
 
 import argparse
 import json
+import random
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable, **kwargs):
+        return iterable
 
 # Add project root for imports when run as script (before other local imports)
 _root = Path(__file__).resolve().parents[2]
@@ -38,7 +45,7 @@ from multi_data_semantic_seg.src.output_format import (
 from multi_data_semantic_seg.src.subsample import (
     filter_predictions_by_instance_type,
     get_classes_and_instance_counts,
-    get_instance_type,
+    subsample_mask_by_coi,
     INSTANCE_TYPE_1CNI,
     INSTANCE_TYPE_NCNI,
 )
@@ -256,25 +263,19 @@ def main():
         if len(dset) == 0:
             print(
                 f"No samples found for {dset_name}. " + (
-                    "Cityscapes needs input images: put leftImg8bit/val/{city}/*_leftImg8bit.png "
-                    "under the cityscapes root, or set --cityscapes-image-root to the folder that contains leftImg8bit/."
+                    "Cityscapes needs leftImg8bit/{split}/{city}/*_leftImg8bit.png under the cityscapes root."
                     if dset_name == "cityscapes" else "Check dataset paths and structure."
                 ),
                 file=sys.stderr,
             )
             continue
-        if getattr(dset, "_using_color_as_input", False):
-            print(
-                "Warning: Using Cityscapes _gtFine_color.png as input (no leftImg8bit). IoU is not meaningful.",
-                file=sys.stderr,
-            )
         class_names = dset.get_class_names()
         if hasattr(dset, "ignore_index"):
             ignore_index = dset.ignore_index
         else:
             ignore_index = 255
 
-        for idx in range(len(dset)):
+        for idx in tqdm(range(len(dset)), desc=dset_name, unit="img"):
             sample = dset[idx]
             image = sample["image"]
             gt = sample["gt"]
@@ -282,7 +283,6 @@ def main():
             image_path = sample["image_path"]
             h, w = sample["height"], sample["width"]
 
-            instance_type = get_instance_type(gt, ignore_index)
             class_ids, counts, total_instances = get_classes_and_instance_counts(gt, ignore_index)
             coi_names = [class_names[c] if c < len(class_names) else str(c) for c in class_ids]
 
@@ -310,17 +310,12 @@ def main():
             # Class ID -> hex for prediction labels (same palette as saved masks)
             class_id_to_hex = get_class_id_to_hex(254)
 
-            # GT filtered to this image's instance type (for GT visualization entry)
-            gt_sub, _ = filter_predictions_by_instance_type(gt, gt, instance_type, ignore_index)
+            # --- nCnI: always emit annotations with all COI classes ---
+            itype_ncni = INSTANCE_TYPE_NCNI
+            gt_sub_ncni, _ = filter_predictions_by_instance_type(gt, gt, itype_ncni, ignore_index)
 
             for model_name, aug_name, pred in results:
-                # Only output/save for the instance type that matches this image; skip other combos
-                itype = instance_type
-                gt_sub, pred_sub = filter_predictions_by_instance_type(gt, pred, itype, ignore_index)
-                # For 1CnI: sample prediction down to the single COI class (filter model response to this class only)
-                if itype == INSTANCE_TYPE_1CNI and class_ids:
-                    coi_class_id = int(class_ids[0])
-                    pred_sub = _sample_pred_to_coi_for_1c(pred_sub, gt_sub, coi_class_id, ignore_index)
+                gt_sub, pred_sub = filter_predictions_by_instance_type(gt, pred, itype_ncni, ignore_index)
                 num_classes = min(256, max(int(gt_sub.max()) + 1, int(pred_sub.max()) + 1, len(class_ids) + 1))
                 met = compute_metrics(pred_sub, gt_sub, num_classes, ignore_index=ignore_index)
 
@@ -349,7 +344,7 @@ def main():
                     "overall_acc": met["overall_acc"],
                     "num_classes_gt": len(class_ids),
                     "total_instances_gt": total_instances,
-                    "instance_type": itype,
+                    "instance_type": itype_ncni,
                 }
 
                 pred_list = build_predictions_semantic(
@@ -362,7 +357,7 @@ def main():
                     image_id=image_id,
                     model_name=model_name,
                     aug_name=aug_name,
-                    instance_type=itype,
+                    instance_type=itype_ncni,
                     class_id_to_hex=class_id_to_hex,
                 )
 
@@ -374,7 +369,7 @@ def main():
                         image_id=image_id,
                         task="semantic_segmentation",
                         coi=coi_names,
-                        instance_type=itype,
+                        instance_type=itype_ncni,
                         model_name=model_name,
                         augmentation=aug_name,
                         final_score=met["mean_iou"],
@@ -389,18 +384,18 @@ def main():
                     fname = f"{image_id}_{model_name}"
                     if aug_name:
                         fname += f"_{aug_name}"
-                    fname += f"_{itype}_iou{mean_iou:.4f}.png"
+                    fname += f"_{itype_ncni}_iou{mean_iou:.4f}.png"
                     out_path = mask_dir / fname
                     rgb = _colorize_mask(pred_sub, ignore_index)
                     Image.fromarray(rgb).save(out_path)
 
-            # One annotation per image: visualized GT in same format as model predictions
+            # nCnI GT entry
             if mask_dir:
-                gt_mask_fname = f"{image_id}_gt_{instance_type}_mask.png"
+                gt_mask_fname = f"{image_id}_gt_{itype_ncni}_mask.png"
                 gt_mask_path = mask_dir / gt_mask_fname
-                Image.fromarray(_colorize_mask(gt_sub, ignore_index)).save(gt_mask_path)
+                Image.fromarray(_colorize_mask(gt_sub_ncni, ignore_index)).save(gt_mask_path)
             gt_pred_list = build_predictions_semantic(
-                gt_sub,
+                gt_sub_ncni,
                 class_ids,
                 coi_names,
                 h,
@@ -409,7 +404,7 @@ def main():
                 image_id=image_id,
                 model_name="gt",
                 aug_name=None,
-                instance_type=instance_type,
+                instance_type=itype_ncni,
                 class_id_to_hex=class_id_to_hex,
             )
             ann_id_str = f"seg_{ann_id}"
@@ -420,7 +415,7 @@ def main():
                     image_id=image_id,
                     task="semantic_segmentation",
                     coi=coi_names,
-                    instance_type=instance_type,
+                    instance_type=itype_ncni,
                     model_name="gt",
                     error_type="gt",
                     augmentation=None,
@@ -432,12 +427,114 @@ def main():
                         "overall_acc": 1.0,
                         "num_classes_gt": len(class_ids),
                         "total_instances_gt": total_instances,
-                        "instance_type": instance_type,
+                        "instance_type": itype_ncni,
                     },
                     predictions_type="image",
                     predictions=gt_pred_list,
                 )
             )
+
+            # --- 1CnI: rule-based random sample of one class; trim GT and pred to that class ---
+            if class_ids:
+                rng = random.Random(hash(image_id) % (2**32))
+                coi_1c = int(rng.choice(class_ids))
+                coi_names_1c = [class_names[coi_1c] if coi_1c < len(class_names) else str(coi_1c)]
+                class_ids_1c = [coi_1c]
+                gt_sub_1c = subsample_mask_by_coi(gt, class_ids_1c, ignore_index)
+                if mask_dir:
+                    gt_mask_fname_1c = f"{image_id}_gt_{INSTANCE_TYPE_1CNI}_mask.png"
+                    Image.fromarray(_colorize_mask(gt_sub_1c, ignore_index)).save(mask_dir / gt_mask_fname_1c)
+
+                for model_name, aug_name, pred in results:
+                    pred_1c = _sample_pred_to_coi_for_1c(pred, gt_sub_1c, coi_1c, ignore_index)
+                    num_classes_1c = 2  # class + ignore
+                    met_1c = compute_metrics(pred_1c, gt_sub_1c, num_classes_1c, ignore_index=ignore_index)
+                    other_scores_1c = {
+                        "mean_iou": met_1c["mean_iou"],
+                        "mean_dice": met_1c["mean_dice"],
+                        "mean_acc": met_1c["mean_acc"],
+                        "overall_acc": met_1c["overall_acc"],
+                        "num_classes_gt": 1,
+                        "total_instances_gt": total_instances,
+                        "instance_type": INSTANCE_TYPE_1CNI,
+                    }
+                    pred_list_1c = build_predictions_semantic(
+                        pred_1c,
+                        class_ids_1c,
+                        coi_names_1c,
+                        h,
+                        w,
+                        output_dir=mask_dir,
+                        image_id=image_id,
+                        model_name=model_name,
+                        aug_name=aug_name,
+                        instance_type=INSTANCE_TYPE_1CNI,
+                        class_id_to_hex=class_id_to_hex,
+                    )
+                    ann_id_str = f"seg_{ann_id}"
+                    ann_id += 1
+                    annotations_out.append(
+                        build_annotation_entry(
+                            annotation_id=ann_id_str,
+                            image_id=image_id,
+                            task="semantic_segmentation",
+                            coi=coi_names_1c,
+                            instance_type=INSTANCE_TYPE_1CNI,
+                            model_name=model_name,
+                            augmentation=aug_name,
+                            final_score=met_1c["mean_iou"],
+                            other_scores=other_scores_1c,
+                            predictions_type="image",
+                            predictions=pred_list_1c,
+                        )
+                    )
+                    if args.save_masks and mask_dir:
+                        fname = f"{image_id}_{model_name}"
+                        if aug_name:
+                            fname += f"_{aug_name}"
+                        fname += f"_{INSTANCE_TYPE_1CNI}_iou{met_1c['mean_iou']:.4f}.png"
+                        Image.fromarray(_colorize_mask(pred_1c, ignore_index)).save(mask_dir / fname)
+
+                # 1CnI GT entry
+                gt_pred_list_1c = build_predictions_semantic(
+                    gt_sub_1c,
+                    class_ids_1c,
+                    coi_names_1c,
+                    h,
+                    w,
+                    output_dir=mask_dir,
+                    image_id=image_id,
+                    model_name="gt",
+                    aug_name=None,
+                    instance_type=INSTANCE_TYPE_1CNI,
+                    class_id_to_hex=class_id_to_hex,
+                )
+                ann_id_str = f"seg_{ann_id}"
+                ann_id += 1
+                annotations_out.append(
+                    build_annotation_entry(
+                        annotation_id=ann_id_str,
+                        image_id=image_id,
+                        task="semantic_segmentation",
+                        coi=coi_names_1c,
+                        instance_type=INSTANCE_TYPE_1CNI,
+                        model_name="gt",
+                        error_type="gt",
+                        augmentation=None,
+                        final_score=1.0,
+                        other_scores={
+                            "mean_iou": 1.0,
+                            "mean_dice": 1.0,
+                            "mean_acc": 1.0,
+                            "overall_acc": 1.0,
+                            "num_classes_gt": 1,
+                            "total_instances_gt": total_instances,
+                            "instance_type": INSTANCE_TYPE_1CNI,
+                        },
+                        predictions_type="image",
+                        predictions=gt_pred_list_1c,
+                    )
+                )
 
     if not images_out:
         print("No predictions produced (no samples in any dataset). Check paths and see messages above.", file=sys.stderr)

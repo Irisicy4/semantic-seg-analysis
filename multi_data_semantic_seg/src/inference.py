@@ -4,10 +4,70 @@ Supports multiple models and runs on CUDA or MPS (Apple Silicon).
 """
 
 from pathlib import Path
+import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+
+
+def _ensure_mmcv_ops_stub():
+    """Inject stub mmcv.ops so mmseg can load without compiled mmcv._ext (e.g. on Mac)."""
+    if "mmcv.ops" in sys.modules:
+        return
+    import types
+    ops = types.ModuleType("mmcv.ops")
+
+    def point_sample(input: torch.Tensor, point_coords: torch.Tensor, align_corners: bool = False) -> torch.Tensor:
+        # input (B, C, H, W), point_coords (B, N, 2) in [0,1]; return (B, C, N). Pure PyTorch fallback.
+        if point_coords.dim() == 2:
+            point_coords = point_coords.unsqueeze(0).expand(input.size(0), -1, -1)
+        B, N, _ = point_coords.shape
+        grid = point_coords.view(B, 1, N, 2) * 2.0 - 1.0  # [0,1] -> [-1,1] for grid_sample
+        out = torch.nn.functional.grid_sample(
+            input, grid, mode="bilinear", padding_mode="zeros", align_corners=align_corners
+        )
+        return out.squeeze(2)
+
+    def sigmoid_focal_loss(
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        gamma: float = 2.0,
+        alpha: float = 0.5,
+        weight: Optional[torch.Tensor] = None,
+        reduction: str = "mean",
+    ) -> torch.Tensor:
+        # Focal loss (PyTorch fallback when mmcv._ext not available). pred/target (N, C).
+        pred_sigmoid = pred.sigmoid()
+        target = target.type_as(pred)
+        one_minus_pt = (1 - pred_sigmoid) * target + pred_sigmoid * (1 - target)
+        focal_weight = (alpha * target + (1 - alpha) * (1 - target)) * one_minus_pt.pow(gamma)
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(pred, target, reduction="none") * focal_weight
+        if weight is not None:
+            loss = loss * weight
+        if reduction == "none":
+            return loss
+        if reduction == "mean":
+            return loss.mean()
+        return loss.sum()
+
+    class CrissCrossAttention(torch.nn.Module):
+        """Stub for mmcv.ops.CrissCrossAttention (identity when _ext not available)."""
+
+        def __init__(self, in_channels: int):
+            super().__init__()
+            self.in_channels = in_channels
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x
+
+    ops.point_sample = point_sample
+    ops.sigmoid_focal_loss = sigmoid_focal_loss
+    ops.CrissCrossAttention = CrissCrossAttention
+    sys.modules["mmcv.ops"] = ops
+
+
+_ensure_mmcv_ops_stub()
 
 
 def get_device(prefer: Optional[str] = None) -> str:

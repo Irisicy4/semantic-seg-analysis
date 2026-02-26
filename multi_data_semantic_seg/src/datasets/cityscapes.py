@@ -1,10 +1,8 @@
 """Cityscapes dataset loader for semantic segmentation inference.
 
-Expects data root: .../gtFine_trainvaltest with:
-  - gtFine/val/, gtFine/train/, gtFine/test/  with  {city}/{id}_gtFine_labelIds.png
-  - leftImg8bit/ (optional): if present, {split}/{city}/{id}_leftImg8bit.png
-
-If leftImg8bit is not under data_root, pass image_root separately (e.g. another folder).
+Expects data root (e.g. multi_data_semantic_seg/data/gtFine_trainvaltest) with:
+  - gtFine/{split}/{city}/{id}_gtFine_labelIds.png
+  - leftImg8bit/{split}/{city}/{id}_leftImg8bit.png  (required; no fallback)
 """
 
 from pathlib import Path
@@ -61,35 +59,14 @@ class CityscapesDataset:
 
         self.gt_dir = self.data_root / 'gtFine' / split
         self.img_dir = self.image_root / 'leftImg8bit' / split
-        if not self.img_dir.exists():
-            self.img_dir = self.image_root / split
         self._samples: List[Tuple[Path, Path]] = []
-        self._using_color_as_input = False
 
     def _collect_samples(self) -> List[Tuple[Path, Path]]:
         samples = []
         for gt_path in self.gt_dir.rglob('*_gtFine_labelIds.png'):
             city = gt_path.parent.name
             stem = gt_path.stem.replace('_gtFine_labelIds', '')
-            # Standard: leftImg8bit/{split}/{city}/{stem}_leftImg8bit.png
             img_path = self.img_dir / city / f'{stem}_leftImg8bit.png'
-            if not img_path.exists():
-                img_path = self.img_dir / city / f'{stem}.png'
-            if not img_path.exists():
-                img_path = self.img_dir / city / f'{stem}.jpg'
-            # Fallback: image next to GT (e.g. same folder)
-            if not img_path.exists():
-                for name in (f'{stem}_leftImg8bit.png', f'{stem}.png', f'{stem}.jpg'):
-                    candidate = gt_path.parent / name
-                    if candidate.exists():
-                        img_path = candidate
-                        break
-            # Fallback: use GT color visualization as input (demo only; IoU not meaningful)
-            if not img_path.exists():
-                color_path = gt_path.parent / f'{stem}_gtFine_color.png'
-                if color_path.exists():
-                    img_path = color_path
-                    self._using_color_as_input = True
             if img_path.exists():
                 samples.append((img_path, gt_path))
         samples.sort(key=lambda x: str(x[0]))
