@@ -1,0 +1,16 @@
+**/*.zip
+*.zip
+*.pth
+mmsegmentation/checkpoints
+
+ADEChallengeData2016/
+cocostuff/
+multi_data_semantic_seg/data
+
+__pycache__/
+**/*.pyc
+**/*/__pycache__
+.DS_Store
+.gitignore
+.gitmodules
+.gitignore
