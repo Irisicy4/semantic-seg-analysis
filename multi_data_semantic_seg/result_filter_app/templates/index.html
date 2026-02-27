@@ -347,7 +347,7 @@
       analysis.forEach((x, i) => { if (!order.has(x.image_id)) order.set(x.image_id, i); });
       const imageKeys = [...new Set(images.map(i => i.id))];
       if (order.size) imageKeys.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
-      const approvedByImage = new Map(images.map(i => [i.id, i.approved_count || 0]));
+      const approvedByImage = new Map(images.map(i => [i.id, Number(i.approved_count) || 0]));
       imageKeys.forEach(id => {
         const opt = document.createElement('option');
         opt.value = id;
@@ -462,6 +462,7 @@
         if (data.ok) {
           ann.user_judgment = judgment;
           renderPreview();
+          refreshImageDropdown();
         }
       } catch (e) {
         console.error(e);
@@ -502,6 +503,28 @@
         } catch (e) { console.error(e); }
       }
       renderPreview();
+      refreshImageDropdown();
+    }
+
+    async function refreshImageDropdown() {
+      const currentId = imageSelect.value;
+      const currentInstance = instanceSelect.value;
+      images = await fetchJson('/api/images');
+      const order = new Map();
+      analysis.forEach((x, i) => { if (!order.has(x.image_id)) order.set(x.image_id, i); });
+      const imageKeys = [...new Set(images.map(i => i.id))];
+      if (order.size) imageKeys.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
+      const approvedByImage = new Map(images.map(i => [i.id, Number(i.approved_count) || 0]));
+      imageSelect.innerHTML = '';
+      imageKeys.forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = (approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '') + id;
+        imageSelect.appendChild(opt);
+      });
+      if (currentId && imageKeys.includes(currentId)) imageSelect.value = currentId;
+      else if (imageKeys.length) imageSelect.selectedIndex = 0;
+      await loadAnnotations();
     }
 
     comparePred.addEventListener('click', (e) => { e.stopPropagation(); if (comparePred.src) openZoom(comparePred.src); });

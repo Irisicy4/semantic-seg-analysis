@@ -50,7 +50,7 @@ def api_images():
     judgments = load_judgments()
     images = data.get("images", [])
     anns = data.get("annotations", [])
-    # Count approved (pass) per image_id for prediction annotations only
+    # Count passes per image (≥5 shows green dot in UI; rejects/undone don't affect the count)
     approved_count = {}
     for a in anns:
         if a.get("model_name") == "gt":
@@ -65,7 +65,7 @@ def api_images():
             "id": iid,
             "file_path": im.get("file_path"),
             "data_source": im.get("data_source"),
-            "approved_count": approved_count.get(iid, 0),
+            "approved_count": int(approved_count.get(iid, 0)),
         })
     return jsonify(out)
 

@@ -42,6 +42,11 @@ echo "Running analysis..."
 python multi_data_semantic_seg/src/result_analyzer.py "$RESULTS_JSON" -o "$ANALYSIS_JSON"
 pip install -q -r multi_data_semantic_seg/result_filter_app/requirements.txt 2>/dev/null || true
 
+if lsof -ti :"$PORT" >/dev/null 2>&1; then
+  echo "Killing previous process on port $PORT..."
+  lsof -ti :"$PORT" | xargs kill -9 2>/dev/null || true
+  sleep 1
+fi
 echo "Starting review UI on port $PORT (background)..."
 python multi_data_semantic_seg/result_filter_app/app.py "$RESULTS_JSON" --analysis "$ANALYSIS_JSON" --port "$PORT" --host "0.0.0.0" &
 APP_PID=$!
