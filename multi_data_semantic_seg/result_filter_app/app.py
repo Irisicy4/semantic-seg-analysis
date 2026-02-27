@@ -50,14 +50,20 @@ def api_images():
     judgments = load_judgments()
     images = data.get("images", [])
     anns = data.get("annotations", [])
-    # Count passes per image (≥5 shows green dot in UI; rejects/undone don't affect the count)
-    approved_count = {}
+    # Count passes per image: nCnI only (≥5 shows green dot), 1CnI only (≥5 shows blue dot)
+    approved_nCnI_count = {}
+    approved_1CnI_count = {}
     for a in anns:
         if a.get("model_name") == "gt":
             continue
         iid = a.get("image_id")
-        if judgments.get(a.get("id")) == "pass":
-            approved_count[iid] = approved_count.get(iid, 0) + 1
+        if judgments.get(a.get("id")) != "pass":
+            continue
+        it = a.get("instance_type")
+        if it == "1CnI":
+            approved_1CnI_count[iid] = approved_1CnI_count.get(iid, 0) + 1
+        else:
+            approved_nCnI_count[iid] = approved_nCnI_count.get(iid, 0) + 1
     out = []
     for im in images:
         iid = im["id"]
@@ -65,7 +71,8 @@ def api_images():
             "id": iid,
             "file_path": im.get("file_path"),
             "data_source": im.get("data_source"),
-            "approved_count": int(approved_count.get(iid, 0)),
+            "approved_count": int(approved_nCnI_count.get(iid, 0)),
+            "approved_1CnI_count": int(approved_1CnI_count.get(iid, 0)),
         })
     return jsonify(out)
 
@@ -100,8 +107,11 @@ def api_annotations():
     for a in preds:
         if a.get("id") in judgments:
             a["user_judgment"] = judgments[a["id"]]
-    # Rank by final_score desc
-    preds.sort(key=lambda a: a.get("final_score") or 0, reverse=True)
+    # Rank: 1CnI by overall_acc, else by final_score (desc)
+    if instance_type == "1CnI":
+        preds.sort(key=lambda a: (a.get("other_scores") or {}).get("overall_acc") or 0, reverse=True)
+    else:
+        preds.sort(key=lambda a: a.get("final_score") or 0, reverse=True)
     return jsonify({"predictions": preds, "gt": gt_ann})
 
 

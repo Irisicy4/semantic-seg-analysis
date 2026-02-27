@@ -348,10 +348,13 @@
       const imageKeys = [...new Set(images.map(i => i.id))];
       if (order.size) imageKeys.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
       const approvedByImage = new Map(images.map(i => [i.id, Number(i.approved_count) || 0]));
+      const approved1CnIByImage = new Map(images.map(i => [i.id, Number(i.approved_1CnI_count) || 0]));
       imageKeys.forEach(id => {
         const opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = (approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '') + id;
+        const green = approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '';
+        const blue = approved1CnIByImage.get(id) >= 5 ? '\uD83D\uDD35 ' : '';
+        opt.textContent = green + blue + id;
         imageSelect.appendChild(opt);
       });
       if (imageSelect.selectedIndex < 0 && imageKeys.length) imageSelect.selectedIndex = 0;
@@ -378,6 +381,7 @@
         previewContainer.innerHTML = '<p class="empty">No predictions for this image + instance type.</p>';
         return;
       }
+      const instanceType = instanceSelect.value;
       currentPreds.forEach((ann, i) => {
         const path = predMaskPath(ann);
         const card = document.createElement('div');
@@ -385,7 +389,9 @@
         card.dataset.index = String(i);
         card.dataset.annId = ann.id || '';
         const label = [ann.model_name, ann.augmentation].filter(Boolean).join(' · ') || ann.model_name;
-        const score = ann.final_score != null ? (ann.final_score * 100).toFixed(2) + '%' : '—';
+        const score = instanceType === '1CnI'
+          ? (ann.other_scores && ann.other_scores.overall_acc != null ? (ann.other_scores.overall_acc * 100).toFixed(2) + '%' : '—')
+          : (ann.final_score != null ? (ann.final_score * 100).toFixed(2) + '%' : '—');
         const judgment = ann.user_judgment;
         card.innerHTML =
           (judgment ? '<span class="badge ' + judgment + '">' + judgment + '</span>' : '') +
@@ -412,11 +418,15 @@
       if (!ann) return;
       const path = predMaskPath(ann);
       const gtPath = currentGt && currentGt.predictions && currentGt.predictions[0] ? currentGt.predictions[0].file_path : null;
+      const instanceType = instanceSelect.value;
+      const accStr = instanceType === '1CnI' && ann.other_scores && ann.other_scores.overall_acc != null
+        ? ' overall_acc: ' + (ann.other_scores.overall_acc * 100).toFixed(2) + '%'
+        : '';
       comparePredLabel.textContent = [ann.model_name, ann.augmentation].filter(Boolean).join(' · ') || ann.model_name;
       comparePred.src = path ? maskUrl(path) : '';
       compareGt.src = gtPath ? maskUrl(gtPath) : '';
       compareTitle.textContent = 'Compare — ' + (compareIndex + 1) + ' / ' + currentPreds.length;
-      compareProgress.textContent = 'Annotation ID: ' + (ann.id || '') + ' — Choose Pass or No';
+      compareProgress.textContent = 'Annotation ID: ' + (ann.id || '') + accStr + ' — Choose Pass or No';
       compareModal.style.display = 'flex';
       btnPrev.disabled = compareIndex <= 0;
       btnNext.disabled = compareIndex >= currentPreds.length - 1;
@@ -515,11 +525,14 @@
       const imageKeys = [...new Set(images.map(i => i.id))];
       if (order.size) imageKeys.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
       const approvedByImage = new Map(images.map(i => [i.id, Number(i.approved_count) || 0]));
+      const approved1CnIByImage = new Map(images.map(i => [i.id, Number(i.approved_1CnI_count) || 0]));
       imageSelect.innerHTML = '';
       imageKeys.forEach(id => {
         const opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = (approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '') + id;
+        const green = approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '';
+        const blue = approved1CnIByImage.get(id) >= 5 ? '\uD83D\uDD35 ' : '';
+        opt.textContent = green + blue + id;
         imageSelect.appendChild(opt);
       });
       if (currentId && imageKeys.includes(currentId)) imageSelect.value = currentId;
