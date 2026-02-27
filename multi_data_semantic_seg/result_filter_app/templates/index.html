@@ -23,7 +23,18 @@
       padding: 1rem 2rem;
       min-height: 100vh;
     }
-    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .header-row .save-status { font-size: 0.8rem; color: var(--pass); }
+    button.save { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    button.save:hover { border-color: var(--accent); }
     .toolbar {
       display: flex;
       gap: 1rem;
@@ -90,6 +101,24 @@
     }
     .preview-card .badge.pass { background: var(--pass); color: var(--bg); }
     .preview-card .badge.fail { background: var(--fail); color: var(--bg); }
+    .preview-card .card-check-wrap {
+      padding: 0.25rem 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.65rem;
+      border-top: 1px solid var(--border);
+    }
+    .preview-card .card-check-wrap input { cursor: pointer; }
+    .preview-card .card-check-wrap label { margin: 0; cursor: pointer; }
+    .set-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .set-actions .label { font-size: 0.85rem; color: #999; }
     .compare-modal {
       position: fixed;
       inset: 0;
@@ -140,11 +169,82 @@
       color: #999;
       margin-top: 0.5rem;
     }
+    .compare-modal .nav-close {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .compare-modal .nav-close button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .compare-modal .pane figure img {
+      cursor: zoom-in;
+    }
+    .zoom-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.95);
+      z-index: 1001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .zoom-overlay img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .zoom-overlay .zoom-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .zoom-overlay .zoom-close:hover { background: var(--border); }
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      align-items: center;
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+    }
+    .legend-row .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .legend-row .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
+    }
+    .legend-row .legend-name { white-space: nowrap; }
     .empty { color: #666; padding: 2rem; }
   </style>
 </head>
 <body>
-  <h1>Result Filter — Compare & Judge</h1>
+  <div class="header-row">
+    <h1>Result Filter — Compare & Judge</h1>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span class="save-status" id="saveStatus"></span>
+      <button type="button" class="save" id="btnSave">Save judgments</button>
+    </div>
+  </div>
   <div class="toolbar">
     <label for="imageSelect">Image</label>
     <select id="imageSelect"></select>
@@ -155,7 +255,15 @@
     </select>
     <button type="button" id="btnCompareEach">Compare each (pop)</button>
   </div>
+  <div class="set-actions">
+    <span class="label">Set judgment (selected cards):</span>
+    <button type="button" id="btnSelectAll">Select all</button>
+    <button type="button" id="btnDeselectAll">Deselect all</button>
+    <button type="button" id="btnApproveSet" class="pass">Approve selected</button>
+    <button type="button" id="btnRejectSet" class="fail">Reject selected</button>
+  </div>
   <div id="previewContainer" class="preview-grid"></div>
+  <div id="legendRow" class="legend-row"></div>
   <div id="compareModal" class="compare-modal" style="display: none;">
     <h2 id="compareTitle">Compare</h2>
     <div class="pane">
@@ -168,11 +276,20 @@
         <figcaption>Ground truth</figcaption>
       </figure>
     </div>
+    <div class="nav-close">
+      <button type="button" id="btnPrev" class="secondary">← Previous</button>
+      <button type="button" id="btnNext" class="secondary">Next →</button>
+      <button type="button" id="btnCloseModal" class="secondary">Close</button>
+    </div>
     <div class="actions">
       <button class="pass" type="button" id="btnPass">Pass</button>
       <button class="fail" type="button" id="btnFail">No</button>
     </div>
     <div class="progress" id="compareProgress"></div>
+  </div>
+  <div id="zoomOverlay" class="zoom-overlay" style="display: none;">
+    <button type="button" class="zoom-close" id="btnCloseZoom">Close zoom</button>
+    <img id="zoomImg" alt="Zoomed" />
   </div>
 
   <script>
@@ -188,6 +305,18 @@
     const btnCompareEach = document.getElementById('btnCompareEach');
     const btnPass = document.getElementById('btnPass');
     const btnFail = document.getElementById('btnFail');
+    const btnPrev = document.getElementById('btnPrev');
+    const btnNext = document.getElementById('btnNext');
+    const btnCloseModal = document.getElementById('btnCloseModal');
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomImg = document.getElementById('zoomImg');
+    const btnCloseZoom = document.getElementById('btnCloseZoom');
+    const btnSave = document.getElementById('btnSave');
+    const saveStatus = document.getElementById('saveStatus');
+    const btnSelectAll = document.getElementById('btnSelectAll');
+    const btnDeselectAll = document.getElementById('btnDeselectAll');
+    const btnApproveSet = document.getElementById('btnApproveSet');
+    const btnRejectSet = document.getElementById('btnRejectSet');
 
     let images = [];
     let analysis = [];
@@ -218,10 +347,11 @@
       analysis.forEach((x, i) => { if (!order.has(x.image_id)) order.set(x.image_id, i); });
       const imageKeys = [...new Set(images.map(i => i.id))];
       if (order.size) imageKeys.sort((a, b) => (order.get(a) ?? 9999) - (order.get(b) ?? 9999));
+      const approvedByImage = new Map(images.map(i => [i.id, i.approved_count || 0]));
       imageKeys.forEach(id => {
         const opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = id;
+        opt.textContent = (approvedByImage.get(id) >= 5 ? '\uD83D\uDFE2 ' : '') + id;
         imageSelect.appendChild(opt);
       });
       if (imageSelect.selectedIndex < 0 && imageKeys.length) imageSelect.selectedIndex = 0;
@@ -253,6 +383,7 @@
         const card = document.createElement('div');
         card.className = 'preview-card';
         card.dataset.index = String(i);
+        card.dataset.annId = ann.id || '';
         const label = [ann.model_name, ann.augmentation].filter(Boolean).join(' · ') || ann.model_name;
         const score = ann.final_score != null ? (ann.final_score * 100).toFixed(2) + '%' : '—';
         const judgment = ann.user_judgment;
@@ -261,8 +392,12 @@
           '<img class="thumb" src="' + (path ? maskUrl(path) : '') + '" alt="" loading="lazy" />' +
           '<div class="meta">' +
           '<span class="score">#' + (i + 1) + ' ' + score + '</span><br/>' + label +
+          '</div>' +
+          '<div class="card-check-wrap" onclick="event.stopPropagation()">' +
+          '<input type="checkbox" class="card-checkbox" id="cb_' + (ann.id || i) + '" checked />' +
+          '<label for="cb_' + (ann.id || i) + '">Include</label>' +
           '</div>';
-        card.addEventListener('click', () => openCompare(i));
+        card.addEventListener('click', (e) => { if (!e.target.closest('.card-check-wrap')) openCompare(i); });
         previewContainer.appendChild(card);
       });
     }
@@ -283,6 +418,35 @@
       compareTitle.textContent = 'Compare — ' + (compareIndex + 1) + ' / ' + currentPreds.length;
       compareProgress.textContent = 'Annotation ID: ' + (ann.id || '') + ' — Choose Pass or No';
       compareModal.style.display = 'flex';
+      btnPrev.disabled = compareIndex <= 0;
+      btnNext.disabled = compareIndex >= currentPreds.length - 1;
+    }
+
+    function closeCompareModal() {
+      compareModal.style.display = 'none';
+    }
+
+    function goPrev() {
+      if (compareIndex > 0) {
+        compareIndex--;
+        showCompareModal();
+      }
+    }
+
+    function goNext() {
+      if (compareIndex < currentPreds.length - 1) {
+        compareIndex++;
+        showCompareModal();
+      }
+    }
+
+    function openZoom(src) {
+      zoomImg.src = src;
+      zoomOverlay.style.display = 'flex';
+    }
+
+    function closeZoom() {
+      zoomOverlay.style.display = 'none';
     }
 
     async function submitJudge(judgment) {
@@ -310,18 +474,104 @@
       }
     }
 
+    function getSelectedAnnIds() {
+      return Array.from(previewContainer.querySelectorAll('.preview-card .card-checkbox:checked'))
+        .map(cb => cb.closest('.preview-card')?.dataset?.annId)
+        .filter(Boolean);
+    }
+
+    function setAllCheckboxes(checked) {
+      previewContainer.querySelectorAll('.card-checkbox').forEach(cb => { cb.checked = !!checked; });
+    }
+
+    async function submitSetJudge(judgment) {
+      const ids = getSelectedAnnIds();
+      if (!ids.length) return;
+      for (const annId of ids) {
+        try {
+          const r = await fetch('/api/judge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ annotation_id: annId, user_judgment: judgment })
+          });
+          const data = await r.json();
+          if (data.ok) {
+            const ann = currentPreds.find(a => a.id === annId);
+            if (ann) ann.user_judgment = judgment;
+          }
+        } catch (e) { console.error(e); }
+      }
+      renderPreview();
+    }
+
+    comparePred.addEventListener('click', (e) => { e.stopPropagation(); if (comparePred.src) openZoom(comparePred.src); });
+    compareGt.addEventListener('click', (e) => { e.stopPropagation(); if (compareGt.src) openZoom(compareGt.src); });
+    btnCloseZoom.addEventListener('click', closeZoom);
+    zoomOverlay.addEventListener('click', (e) => { if (e.target === zoomOverlay) closeZoom(); });
+
+    document.addEventListener('keydown', (e) => {
+      if (zoomOverlay.style.display === 'flex') {
+        if (e.key === 'Escape') { e.preventDefault(); closeZoom(); }
+        return;
+      }
+      if (compareModal.style.display !== 'flex') return;
+      if (e.key === 'Escape') { e.preventDefault(); closeCompareModal(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); return; }
+    });
+
     btnCompareEach.addEventListener('click', () => {
       if (!currentPreds.length) return;
       compareIndex = 0;
       openCompare(0);
     });
+    btnPrev.addEventListener('click', goPrev);
+    btnNext.addEventListener('click', goNext);
+    btnCloseModal.addEventListener('click', closeCompareModal);
     btnPass.addEventListener('click', () => submitJudge('pass'));
     btnFail.addEventListener('click', () => submitJudge('fail'));
+    btnSave.addEventListener('click', async () => {
+      saveStatus.textContent = '';
+      try {
+        const r = await fetch('/api/save_judgments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await r.json();
+        if (data.ok) {
+          saveStatus.textContent = 'Saved (' + (data.count || 0) + ' judgments)';
+          setTimeout(() => { saveStatus.textContent = ''; }, 2500);
+        } else {
+          saveStatus.textContent = 'Save failed';
+        }
+      } catch (e) {
+        saveStatus.textContent = 'Save failed';
+      }
+    });
+    btnSelectAll.addEventListener('click', () => setAllCheckboxes(true));
+    btnDeselectAll.addEventListener('click', () => setAllCheckboxes(false));
+    btnApproveSet.addEventListener('click', () => submitSetJudge('pass'));
+    btnRejectSet.addEventListener('click', () => submitSetJudge('fail'));
 
     imageSelect.addEventListener('change', loadAnnotations);
     instanceSelect.addEventListener('change', () => { loadImages().then(loadAnnotations); });
 
-    loadImages().then(loadAnnotations);
+    async function loadLegend() {
+      const el = document.getElementById('legendRow');
+      try {
+        const items = await fetchJson('/api/palette');
+        if (!items.length) { el.innerHTML = ''; return; }
+        el.innerHTML = items.map(({ label, color_hex }) =>
+          '<span class="legend-item"><span class="legend-swatch" style="background:' + color_hex + '"></span><span class="legend-name">' + escapeHtml(label) + '</span></span>'
+        ).join('');
+      } catch (_) {
+        el.innerHTML = '';
+      }
+    }
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    loadImages().then(() => { loadAnnotations(); loadLegend(); });
   </script>
 </body>
 </html>

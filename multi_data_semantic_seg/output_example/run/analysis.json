@@ -1,6 +1,38 @@
 {
   "by_image_instance": [
     {
+      "image_id": "ade20k_ADE_val_00000026",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.03220532,
+      "ranking_agrees": false,
+      "composite_score": 0.03220532,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "ade20k_ADE_val_00001028",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.02760275,
+      "ranking_agrees": false,
+      "composite_score": 0.02760275,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "ade20k_ADE_val_00000025",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.01286714,
+      "ranking_agrees": false,
+      "composite_score": 0.01286714,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "ade20k_ADE_val_00001029",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.00379228,
+      "ranking_agrees": false,
+      "composite_score": 0.00379228,
+      "n_annotations": 12
+    },
+    {
       "image_id": "cityscapes_frankfurt_000000_001751_gtFine_color",
       "instance_type": "nCnI",
       "variance_final_score": 0.0012875,
@@ -14,6 +46,14 @@
       "variance_final_score": 0.00114896,
       "ranking_agrees": false,
       "composite_score": 0.00114896,
+      "n_annotations": 12
+    },
+    {
+      "image_id": "ade20k_ADE_val_00000029",
+      "instance_type": "nCnI",
+      "variance_final_score": 0.0011138,
+      "ranking_agrees": false,
+      "composite_score": 0.0011138,
       "n_annotations": 12
     },
     {

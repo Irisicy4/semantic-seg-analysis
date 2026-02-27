@@ -22,6 +22,21 @@ bash run.sh ../output0/run_cityscapes/results_cityscapes.json ../output0/run_cit
 
 Then open **http://127.0.0.1:5000** in a browser.
 
+### Hosted access (not on same LAN)
+
+To let remote reviewers open the UI via a public URL, use **ngrok** from the repo root:
+
+```bash
+# One-time: install ngrok and add your authtoken from https://ngrok.com
+brew install ngrok
+ngrok config add-authtoken YOUR_TOKEN
+
+# Run review UI and expose it; share the https://xxxx.ngrok-free.app URL
+bash multi_data_semantic_seg/review_with_tunnel.sh [path/to/results.json]
+```
+
+Judgments still save to your local `judgments*.json`. Press Ctrl+C to stop the tunnel and the app.
+
 ## Usage
 
 1. **Image** — Select an image (list is ordered by analysis variance if you passed `--analysis`).

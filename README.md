@@ -2,6 +2,8 @@
 
 Run semantic segmentation (ADE20K and/or Cityscapes) with multiple models and optional image augmentations; output JSON and optional mask PNGs with metrics.
 
+**Result filter app** — After a run, use the web UI to compare prediction masks vs ground truth and record pass/fail judgments. Judgments are stored in a separate `judgments*.json` (results JSON stays read-only). Run locally or expose via ngrok for remote reviewers. See [multi_data_semantic_seg/result_filter_app/README.md](multi_data_semantic_seg/result_filter_app/README.md) and scripts `review_cityscapes.sh` / `review_with_tunnel.sh`.
+
 ---
 
 ## Setup variation list
